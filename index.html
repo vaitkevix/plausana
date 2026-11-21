@@ -26,8 +26,10 @@ button{cursor:pointer}
 .wrap{max-width:1180px;margin:0 auto;padding:calc(16px + env(safe-area-inset-top)) 16px calc(110px + env(safe-area-inset-bottom))}
 .top{display:flex;align-items:center;gap:12px;margin:0 0 14px}
 .top .t{flex:1;min-width:0}
-.top small{display:block;font-size:13px;font-weight:700;color:var(--ink3)}
-.top h1{margin:2px 0 0;font-size:clamp(26px,4vw,40px);font-weight:800;letter-spacing:-.03em;line-height:1.05}
+.top small{display:block;font-size:13px;font-weight:700;color:var(--ink3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.top .lg{width:44px;height:44px;border-radius:14px;background:var(--mint);color:var(--ink);display:grid;place-items:center;flex:none}
+.top .bn{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:clamp(17px,4.6vw,20px);font-weight:800;letter-spacing:-.03em;line-height:1.15}
+.pt{margin:0 0 14px;font-size:clamp(26px,4vw,40px);font-weight:800;letter-spacing:-.03em;line-height:1.05}
 .ib{width:44px;height:44px;border-radius:50%;border:0;background:var(--surf);display:grid;place-items:center;flex:none;color:var(--ink)}
 .ib.dk{background:var(--dark);color:var(--ondark)}
 .card{border-radius:28px;background:var(--surf);padding:16px 18px}
@@ -42,7 +44,8 @@ button{cursor:pointer}
 .seg button{min-height:40px;padding:0 16px;border:0;border-radius:999px;background:transparent;font-size:14px;font-weight:800;white-space:nowrap}
 .seg button.on{background:var(--dark);color:var(--ondark)}
 .banner{display:flex;align-items:center;gap:12px;padding:14px 16px;border-radius:24px;margin:0 0 12px}
-.banner b{display:block;font-size:14px;font-weight:800}.banner span{display:block;font-size:12.5px;font-weight:700;color:var(--ink2)}
+.banner b{display:block;font-size:14px;font-weight:800}.banner div>span{display:block;font-size:12.5px;font-weight:700;color:var(--ink2)}
+.banner .dot{display:grid;place-items:center;color:var(--ink)}
 .dot{width:40px;height:40px;border-radius:50%;background:var(--surf);display:grid;place-items:center;flex:none}
 .prog .row{display:flex;justify-content:space-between;font-size:13px;font-weight:700;color:var(--ink2)}
 .prog .big{display:flex;align-items:baseline;gap:6px;margin-top:4px}.prog .big b{font-size:44px;font-weight:800;letter-spacing:-.03em;line-height:1}.prog .big span{font-size:16px;font-weight:800;color:var(--ink2)}
@@ -128,11 +131,13 @@ button{cursor:pointer}
 
 <main class="wrap" id="vApp" hidden>
   <header class="top">
-    <div class="t"><small id="hdSub">Zāles pļaušana</small><h1 id="hdTitle">Šodien</h1></div>
+    <span class="lg" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 20h18"/><path d="M6 20c0-5 1-9 3-12M10 20c0-4 1-7 3-9M14 20c0-3 1-6 4-8"/></svg></span>
+    <div class="t"><b class="bn">Zāles pļaušana</b><small id="hdSub">Grafiks · izpilde ar bildi</small></div>
     <button class="ib" id="btnTheme" aria-label="Tumšais režīms"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg></button>
     <button class="ib" id="btnRefresh" aria-label="Atjaunot"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg></button>
     <button class="ib dk" id="btnMe" aria-label="Profils">··</button>
   </header>
+  <h1 class="pt" id="hdTitle">Šodien</h1>
   <div id="view"></div>
   <p class="copy">© VAITKEVIX, SIA</p>
 </main>
