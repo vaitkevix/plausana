@@ -5,7 +5,11 @@
 <script>/*SH viena saite: lietotne strādā tikai portālā vaitkevix.cloud/sh. © VAITKEVIX, SIA*/(function(){try{if(window.top!==window)return}catch(e){return}if(/^(localhost|127\.|sh\.test)/.test(location.hostname))return;var h=location.hash.slice(1);location.replace('https://vaitkevix.cloud/sh/#pl'+(h?'/'+h:''))})()</script>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#f1f4f2">
+<script>try{document.documentElement.dataset.theme=localStorage.getItem('sh_theme')==='dark'?'dark':'light'}catch(e){}</script>
 <title>SH | Zāles pļaušana</title>
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+<link rel="apple-touch-icon" href="icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
 <!-- SH | Zāles pļaušana — grafiks veidojas pats (intervāls, slodze, lietus, nepaspētie), izpilde ar bildi. © VAITKEVIX, SIA -->
@@ -187,7 +191,11 @@ function drawTabs() {
 }
 $('tabs').onclick = (e) => { const b = e.target.closest('[data-t]'); if (!b) return; S.tab = b.dataset.t; drawTabs(); draw(); scrollTo(0, 0); };
 $('btnRefresh').onclick = () => load().then(() => toast('Atjaunots')).catch(err => toast(err.message, 'err'));
-$('btnTheme').onclick = () => { const d = document.documentElement.dataset.theme === 'dark' ? '' : 'dark'; document.documentElement.dataset.theme = d; ls.set('plausana_theme', d); };
+/* Tēma kopīga ar SH portālu (sh_theme): bez atslēgas — gaišā; portāla pārslēgšana mainās uzreiz */
+function applyTheme(t) { document.documentElement.dataset.theme = t === 'dark' ? 'dark' : 'light'; }
+$('btnTheme').onclick = () => { const t = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'; applyTheme(t); ls.set('sh_theme', t); };
+addEventListener('storage', (e) => { if (e.key === 'sh_theme') applyTheme(e.newValue); });
+addEventListener('message', (e) => { const m = e.data; if (e.origin === location.origin && m && m.sh === 'theme') applyTheme(m.t); });
 $('btnMe').onclick = () => { const s = sheet(`<div class="hd"><h3>${esc(S.D.me.name)}</h3>${X}</div><p style="font-weight:700;color:var(--ink2);margin:0 0 14px">${esc(ROLE[S.D.me.role] || '')}</p><button class="pill big" style="width:100%" id="mOut">Iziet</button>`);
   s.querySelector('#mOut').onclick = logout; };
 
@@ -433,7 +441,7 @@ function drawRules(v) {
 }
 
 /* ---------- start ---------- */
-(function () { const th = ls.get('plausana_theme'); if (th) document.documentElement.dataset.theme = th;
+(function () { applyTheme(ls.get('sh_theme'));
   const h = location.hash.slice(1); if (h && ['today', 'month', 'objs', 'rules', 'map'].indexOf(h) !== -1) S.tab = h;
   if (!S.pin) return showGate('');
   load().catch(err => { if (err.code === 'auth') { ls.del('plausana_pin'); S.pin = ''; showGate('PIN vairs nederīgs vai nav piekļuves pļaušanai'); } else { showGate(err.message); } });
