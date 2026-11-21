@@ -162,14 +162,17 @@ const RW = { admin: 3, vaditajs: 2, izpilditajs: 1, skatitajs: 0 };
 const can = (r) => (RW[role()] || 0) >= RW[r];
 
 function toast(t, kind) { document.querySelectorAll('.toast').forEach(x => x.remove()); const el = document.createElement('div'); el.className = 'toast' + (kind === 'err' ? ' err' : ''); el.textContent = t; document.body.appendChild(el); setTimeout(() => el.remove(), 3200); }
+const NET = 'Nav interneta vai vājš signāls — mēģiniet vēlreiz';
 async function api(action, data) {
-  const r = await fetch(API, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(Object.assign({ action, pin: S.pin }, data || {})) });
-  const j = await r.json().catch(() => ({ ok: false, error: 'Serveris neatbild' }));
+  const ac = new AbortController(), tm = setTimeout(() => ac.abort(), action === 'done' ? 90000 : 25000);
+  let r; try { r = await fetch(API, { method: 'POST', signal: ac.signal, headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(Object.assign({ action, pin: S.pin }, data || {})) }); }
+  catch (e) { const er = new Error(NET); er.code = 'net'; throw er; } finally { clearTimeout(tm); }
+  const j = await r.json().catch(() => ({ ok: false, error: 'Serveris neatbild — mēģiniet vēlreiz', code: 'net' }));
   if (!j.ok) { const e = new Error(j.error || 'Kļūda'); e.code = j.code; throw e; }
   return j;
 }
 function sheet(html) { closeSheet(); const b = document.createElement('div'); b.className = 'sheet-bg'; b.id = 'sheetBg'; b.innerHTML = `<div class="sheet" role="dialog" aria-modal="true">${html}</div>`;
-  b.addEventListener('click', e => { if (e.target === b || e.target.closest('[data-x]')) closeSheet(); }); document.body.appendChild(b); return b.firstChild; }
+  b.addEventListener('click', e => { if (e.target.closest('[data-x]') || (e.target === b && !b.dataset.keep)) closeSheet(); }); document.body.appendChild(b); return b.firstChild; }
 function closeSheet() { const b = $('sheetBg'); if (b) b.remove(); }
 const X = '<button class="ib" data-x aria-label="Aizvērt"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>';
 
@@ -247,7 +250,8 @@ function shrink(file, max) {
 function openVisit(id) {
   const x = S.D.visits.find(v => v.id === id); if (!x) return;
   const o = S.objBy[x.anorm] || {};
-  const head = `<div class="hd"><h3>${esc(x.adrese)}</h3>${X}</div>
+  const nq = o.lat ? o.lat + ',' + o.lng : x.adrese.replace(/^\s*(j|vn[iī])\s*\|\s*/i, '') + ', Latvija';
+  const head = `<div class="hd"><h3>${esc(x.adrese)}</h3>${X}</div>${x.statuss !== 'done' ? `<div style="display:flex;gap:8px;margin:0 0 12px"><a class="pill" href="https://waze.com/ul?${o.lat ? 'll=' + nq : 'q=' + encodeURIComponent(nq)}&navigate=yes" target="_blank" rel="noopener">Braukt · Waze</a><a class="pill" href="https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(nq)}" target="_blank" rel="noopener">Google Maps</a></div>` : ''}
     <div class="card mint" style="margin:0 0 12px"><div style="display:flex;flex-wrap:wrap;gap:8px">
       <span class="chip" style="background:var(--surf)">${m2f(o.m2)} m²</span><span class="chip" style="background:var(--surf)">ik ${o.intervals || S.D.cfg.interval} dienas</span>
       ${o.piekluve ? `<span class="chip wrap" style="background:var(--surf)">Piekļuve: ${esc(o.piekluve)}</span>` : ''}</div>${o.piezime ? `<p style="margin:10px 0 0;font-weight:700">${esc(o.piezime)}</p>` : ''}</div>`;
@@ -258,31 +262,35 @@ function openVisit(id) {
       <div class="thumbs">${ph.map(p => `<a href="${IMG.replace('w400', 'w1600') + encodeURIComponent(p)}" target="_blank" rel="noopener"><img src="${IMG + encodeURIComponent(p)}" alt="Bilde pēc pļaušanas"></a>`).join('') || '<span style="font-weight:700;color:var(--ink3)">Bez bildes</span>'}</div>`);
     return;
   }
-  const P = { photos: [], why: '' };
+  const P = (S.draft = S.draft || {})[id] || (S.draft[id] = { photos: [], why: '' });   // nejauši aizverot, bildes nepazūd
+  let busyPh = 0;
   const s = sheet(head + `<div class="f"><span class="lb">Bilde pēc pļaušanas${S.D.cfg.photoReq ? ' · obligāta' : ''}</span><div class="photos" id="phs"></div>
-      <input type="file" id="phIn" accept="image/*" capture="environment" multiple hidden></div>
+      <input type="file" id="phIn" accept="image/*" capture="environment" multiple hidden><input type="file" id="phG" accept="image/*" multiple hidden></div>
     <div class="checks f"><label><input type="checkbox" checked> Zāliens nopļauts</label><label><input type="checkbox"> Malas apgrieztas</label><label><input type="checkbox"> Zāle savākta</label></div>
     <div class="f"><label for="vNote">Piezīme vadītājam</label><input id="vNote" placeholder="Piem. pie bērnu laukuma bedre"></div>
     <div class="f"><span class="lb">Nevar izpildīt? Adrese pārcelsies pati</span><div class="chips" id="why">${['Lietus', 'Slapjš zāliens', 'Nav piekļuves', 'Tehnika', 'Nepaspēju'].map(w => `<button type="button" data-w="${w}">${w}</button>`).join('')}</div></div>
     <div class="acts"><button class="btn-rose" id="vCant">Nevar</button><button class="btn-dk" id="vDone">Nopļauts</button></div>`);
   const drawPh = () => { s.querySelector('#phs').innerHTML = P.photos.map((p, i) => `<div class="ph" style="background-image:url('${p}')"><button type="button" data-rm="${i}" aria-label="Noņemt bildi">×</button></div>`).join('')
-    + (P.photos.length < 4 ? `<button type="button" class="add" id="phAdd"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>Bilde</button>` : ''); };
-  drawPh();
-  s.querySelector('#phs').onclick = (e) => { const rm = e.target.closest('[data-rm]'); if (rm) { P.photos.splice(+rm.dataset.rm, 1); drawPh(); return; } if (e.target.closest('#phAdd')) s.querySelector('#phIn').click(); };
-  s.querySelector('#phIn').onchange = async (e) => { for (const f of [...e.target.files].slice(0, 4 - P.photos.length)) { try { P.photos.push(await shrink(f, 1400)); } catch (err) { toast(err.message, 'err'); } } e.target.value = ''; drawPh(); };
+    + (P.photos.length < 4 ? `<button type="button" class="add" id="phAdd"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>Uzņemt</button><button type="button" class="add" id="phGal"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-9 9"/></svg>No galerijas</button>` : ''); };
+  s.parentElement.dataset.keep = '1'; drawPh();
+  if (P.why) s.querySelectorAll('#why button').forEach(z => z.classList.toggle('on', z.dataset.w === P.why));
+  s.querySelector('#phs').onclick = (e) => { const rm = e.target.closest('[data-rm]'); if (rm) { P.photos.splice(+rm.dataset.rm, 1); drawPh(); return; } if (e.target.closest('#phAdd')) s.querySelector('#phIn').click(); if (e.target.closest('#phGal')) s.querySelector('#phG').click(); };
+  const addPh = async (e) => { busyPh++; try { for (const f of [...e.target.files].slice(0, 4 - P.photos.length)) { try { P.photos.push(await shrink(f, 1400)); } catch (err) { toast(err.message, 'err'); } } } finally { busyPh--; } e.target.value = ''; drawPh(); };
+  s.querySelector('#phIn').onchange = addPh; s.querySelector('#phG').onchange = addPh;
   s.querySelector('#why').onclick = (e) => { const b = e.target.closest('[data-w]'); if (!b) return; P.why = P.why === b.dataset.w ? '' : b.dataset.w; s.querySelectorAll('#why button').forEach(z => z.classList.toggle('on', z.dataset.w === P.why)); };
   const busy = (b, t) => { b.disabled = true; b.textContent = t; };
   s.querySelector('#vDone').onclick = async (e) => {
+    if (busyPh) return toast('Bilde vēl apstrādājas — pagaidiet sekundi', 'err');
     if (S.D.cfg.photoReq && !P.photos.length) return toast('Pievienojiet bildi pēc pļaušanas', 'err');
     const checks = [...s.querySelectorAll('.checks input')].map((c, i) => c.checked ? ['nopļauts', 'malas', 'savākts'][i] : '').filter(Boolean).join(', ');
     const note = [s.querySelector('#vNote').value.trim(), checks ? '(' + checks + ')' : ''].filter(Boolean).join(' ');
     busy(e.target, 'Augšupielādē…');
-    try { await api('done', { id, photos: P.photos, piezime: note }); closeSheet(); toast('Nopļauts ✓'); await load(); } catch (err) { toast(err.message, 'err'); e.target.disabled = false; e.target.textContent = 'Nopļauts'; }
+    try { await api('done', { id, photos: P.photos, piezime: note }); delete S.draft[id]; closeSheet(); toast('Nopļauts ✓'); await load(); } catch (err) { toast(err.message, 'err'); e.target.disabled = false; e.target.textContent = 'Nopļauts'; }
   };
   s.querySelector('#vCant').onclick = async (e) => {
     if (!P.why) { s.querySelector('#why').scrollIntoView({ behavior: 'smooth', block: 'center' }); return toast('Izvēlieties iemeslu', 'err'); }
     busy(e.target, '…');
-    try { await api('cant', { id, iemesls: P.why }); closeSheet(); toast('Pārcelts uz nākamo darba dienu'); await load(); } catch (err) { toast(err.message, 'err'); e.target.disabled = false; e.target.textContent = 'Nevar'; }
+    try { await api('cant', { id, iemesls: P.why }); delete S.draft[id]; closeSheet(); toast('Pārcelts uz nākamo darba dienu'); await load(); } catch (err) { toast(err.message, 'err'); e.target.disabled = false; e.target.textContent = 'Nevar'; }
   };
 }
 
@@ -290,7 +298,7 @@ function openVisit(id) {
 async function drawMonth(v) {
   const D = S.D, ym = S.ym, [y, m] = ym.split('-').map(Number);
   $('hdTitle').textContent = MON[m - 1][0].toUpperCase() + MON[m - 1].slice(1) + ' ' + y;
-  if (!S.month || S.month.ym !== ym) { v.innerHTML = '<div class="skel"></div><div class="skel"></div>'; try { S.month = { ym, visits: (await api('month', { ym })).visits }; } catch (err) { v.innerHTML = `<div class="card empty">${esc(err.message)}</div>`; return; } }
+  if (!S.month || S.month.ym !== ym) { v.innerHTML = '<div class="skel"></div><div class="skel"></div>'; try { const vs = (await api('month', { ym })).visits; if (S.tab !== 'month' || S.ym !== ym) return; S.month = { ym, visits: vs }; } catch (err) { v.innerHTML = `<div class="card empty">${esc(err.message)}</div>`; return; } }
   const V = S.month.visits, by = {}; V.forEach(x => (by[x.datums] = by[x.datums] || []).push(x));
   const first = ym + '-01', pad = dow(first) - 1, n = new Date(Date.UTC(y, m, 0)).getUTCDate(), t = D.today;
   const cells = []; for (let i = 0; i < pad; i++) cells.push('<div class="d blank"></div>');
@@ -449,7 +457,12 @@ function drawRules(v) {
 (function () { applyTheme(ls.get('sh_theme'));
   const h = location.hash.slice(1); if (h && ['today', 'month', 'objs', 'rules', 'map'].indexOf(h) !== -1) S.tab = h;
   if (!S.pin) return showGate('');
-  load().catch(err => { if (err.code === 'auth') { ls.del('plausana_pin'); S.pin = ''; showGate('PIN vairs nederīgs vai nav piekļuves pļaušanai'); } else { showGate(err.message); } });
+  const first = () => load().catch(err => { if (err.code === 'auth') { ls.del('plausana_pin'); S.pin = ''; showGate('PIN vairs nederīgs vai nav piekļuves pļaušanai'); }
+    else if (err.code === 'net' && !S.D) { $('vGate').hidden = true; $('vApp').hidden = false; $('view').innerHTML = `<div class="card empty">${esc(NET)}<br><button class="pill dk" id="reTry" style="margin-top:12px">Mēģināt vēlreiz</button></div>`; $('reTry').onclick = first; }
+    else showGate(err.message); });
+  first();
+  let last = Date.now(); const auto = () => { if (!S.D || $('sheetBg') || document.hidden || Date.now() - last < 60000) return; last = Date.now(); load().catch(() => 0); };
+  document.addEventListener('visibilitychange', auto); setInterval(auto, 120000); addEventListener('online', () => { last = 0; auto(); });
 })();
 </script>
 </body>
