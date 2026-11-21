@@ -141,7 +141,7 @@ const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const ls = { get: k => { try { return localStorage.getItem(k); } catch (e) { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} }, del: k => { try { localStorage.removeItem(k); } catch (e) {} } };
 const S = { pin: ls.get('plausana_pin') || '', tab: 'today', day: '', ym: '', month: null, q: '', grp: '', D: null };
-const ROLE = { admin: 'Administrators', vaditajs: 'Darbu vadītājs', izpilditajs: 'Izpildītājs' };
+const ROLE = { admin: 'Administrators', vaditajs: 'Darbu vadītājs', izpilditajs: 'Izpildītājs', skatitajs: 'Skatītājs' };
 const WD = ['P', 'O', 'T', 'C', 'Pk', 'S', 'Sv'], MON = ['janvāris', 'februāris', 'marts', 'aprīlis', 'maijs', 'jūnijs', 'jūlijs', 'augusts', 'septembris', 'oktobris', 'novembris', 'decembris'];
 const addDays = (d, n) => { const x = new Date(d + 'T12:00:00Z'); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10); };
 const dow = (d) => { const w = new Date(d + 'T12:00:00Z').getUTCDay(); return w === 0 ? 7 : w; };
@@ -149,7 +149,8 @@ const lvLong = (d) => { const x = new Date(d + 'T12:00:00Z'); return x.toLocaleD
 const lvS = (d) => d ? (+d.slice(8, 10)) + '.' + d.slice(5, 7) + '.' : '';
 const m2f = (n) => Math.round(+n || 0).toLocaleString('lv-LV');
 const role = () => (S.D && S.D.me.role) || '';
-const can = (r) => ({ admin: 3, vaditajs: 2, izpilditajs: 1 }[role()] || 0) >= ({ admin: 3, vaditajs: 2, izpilditajs: 1 }[r]);
+const RW = { admin: 3, vaditajs: 2, izpilditajs: 1, skatitajs: 0 };
+const can = (r) => (RW[role()] || 0) >= RW[r];
 
 function toast(t, kind) { document.querySelectorAll('.toast').forEach(x => x.remove()); const el = document.createElement('div'); el.className = 'toast' + (kind === 'err' ? ' err' : ''); el.textContent = t; document.body.appendChild(el); setTimeout(() => el.remove(), 3200); }
 async function api(action, data) {
@@ -179,7 +180,7 @@ async function load(keepView) {
   drawTabs(); if (S.tab === 'month') S.month = null; draw();
 }
 function drawTabs() {
-  const T = [['today', 'Šodien']].concat(can('vaditajs') ? [['month', 'Grafiks'], ['objs', 'Objekti']] : []).concat(can('admin') ? [['rules', 'Noteikumi']] : []);
+  const T = [['today', 'Šodien'], ['month', 'Grafiks'], ['objs', 'Objekti'], ['map', 'Karte']].concat(can('admin') ? [['rules', 'Noteikumi']] : []);
   if (!T.some(x => x[0] === S.tab)) S.tab = 'today';
   $('tabs').innerHTML = T.map(([k, l]) => `<button type="button" data-t="${k}" class="${S.tab === k ? 'on' : ''}">${l}</button>`).join('');
   $('tabs').hidden = T.length < 2;
@@ -196,6 +197,7 @@ function draw() {
   if (S.tab === 'month') return drawMonth(v);
   if (S.tab === 'objs') return drawObjs(v);
   if (S.tab === 'rules') return drawRules(v);
+  if (S.tab === 'map') return drawMap(v);
 }
 
 /* ---------- Šodien ---------- */
@@ -216,7 +218,7 @@ function drawDay(v) {
     <div class="list">${list.map((x, i) => { const o = S.objBy[x.anorm] || {}, st = x.statuss === 'done' ? 'done' : x.prio ? 'moved' : 'plan';
       const sub = x.statuss === 'done' ? `${m2f(o.m2)} m² · ${esc(x.laiks)} · ${esc(x.izpilditajs)}` : `${m2f(o.m2)} m²${x.parcelts ? ' · pārcelts ' + x.parcelts + '×' + (x.iemesls ? ' (' + esc(x.iemesls.toLowerCase()) + ')' : '') : ''}${o.piekluve ? ' · piekļuve' : ''}`;
       return `<button type="button" class="stop s-${st}" data-v="${x.id}"><span class="n">${i + 1}</span><span class="tx"><b>${esc(x.adrese)}</b><span>${sub}</span></span>
-        <span class="chip">${x.statuss === 'done' ? 'Nopļauts' : st === 'moved' ? 'Pirmais rindā' : d <= t ? 'Atzīmēt' : 'Ieplānots'}</span></button>`; }).join('') || '<div class="card empty">Šai dienai pļaušana nav ieplānota.</div>'}</div>`;
+        <span class="chip">${x.statuss === 'done' ? 'Nopļauts' : st === 'moved' ? 'Pirmais rindā' : d <= t && can('izpilditajs') ? 'Atzīmēt' : 'Ieplānots'}</span></button>`; }).join('') || '<div class="card empty">Šai dienai pļaušana nav ieplānota.</div>'}</div>`;
   v.querySelector('.seg').onclick = (e) => { const b = e.target.closest('[data-d]'); if (b) { S.day = b.dataset.d; draw(); } };
   v.querySelector('.list').onclick = (e) => { const b = e.target.closest('[data-v]'); if (b) openVisit(b.dataset.v); };
   const rp = $('btnReplan'); if (rp) rp.onclick = async () => { rp.disabled = true; try { const r = await api('replan'); toast('Pārplānots: +' + r.added + ' jauni, ' + r.moved + ' pārcelti'); await load(); } catch (err) { toast(err.message, 'err'); } finally { rp.disabled = false; } };
@@ -236,6 +238,7 @@ function openVisit(id) {
     <div class="card mint" style="margin:0 0 12px"><div style="display:flex;flex-wrap:wrap;gap:8px">
       <span class="chip" style="background:var(--surf)">${m2f(o.m2)} m²</span><span class="chip" style="background:var(--surf)">ik ${o.intervals || S.D.cfg.interval} dienas</span>
       ${o.piekluve ? `<span class="chip wrap" style="background:var(--surf)">Piekļuve: ${esc(o.piekluve)}</span>` : ''}</div>${o.piezime ? `<p style="margin:10px 0 0;font-weight:700">${esc(o.piezime)}</p>` : ''}</div>`;
+  if (x.statuss !== 'done' && !can('izpilditajs')) { sheet(head + `<p style="font-weight:800;margin:0 0 8px">Ieplānots ${esc(lvS(x.datums))}${x.parcelts ? ' · pārcelts ' + x.parcelts + '×' : ''}</p><p style="font-weight:700;color:var(--ink2);margin:0">Jums ir skatīšanās tiesības — atzīmēt var izpildītājs vai vadītājs.</p><div class="acts" style="grid-template-columns:1fr"><button class="btn-lt" id="vObj">Objekta kartiņa</button></div>`).querySelector('#vObj').onclick = () => objCard(o); return; }
   if (x.statuss === 'done') {
     const ph = String(x.foto || '').split(',').filter(Boolean);
     sheet(head + `<p style="font-weight:800;margin:0 0 6px">Nopļauts ${esc(lvS(x.datums))} ${esc(x.laiks)} · ${esc(x.izpilditajs)}</p>${x.piezime ? `<p style="font-weight:700;color:var(--ink2);margin:0 0 8px">${esc(x.piezime)}</p>` : ''}
@@ -309,18 +312,80 @@ function drawObjs(v) {
     .sort((a, b) => ((b.m2 > 0 && b.aktivs !== 0) - (a.m2 > 0 && a.aktivs !== 0)) || a.adrese.localeCompare(b.adrese, 'lv'));
   const on = D.objects.filter(o => o.m2 > 0 && o.aktivs !== 0);
   v.innerHTML = `<div class="card mint" style="margin:0 0 12px"><b style="font-size:15px;font-weight:800">${on.length} objekti pļaušanā · ${m2f(on.reduce((s, o) => s + (+o.m2 || 0), 0))} m²</b>
-      <p style="margin:4px 0 0;font-size:13px;font-weight:700;color:var(--ink2)">Grafikā nonāk objekti ar m² > 0. Ievadiet platību un intervālu — datumus grafiks izliks pats.</p></div>
+      <p style="margin:4px 0 0;font-size:13px;font-weight:700;color:var(--ink2)">${can('vaditajs') ? 'Grafikā nonāk objekti ar m² > 0. Ievadiet platību un intervālu — datumus grafiks izliks pats.' : 'Uzspiediet objektu — redzēsiet bildes pēc pļaušanas un vēsturi.'}</p></div>
     <div class="search"><input id="oq" placeholder="Meklēt adresi…" value="${esc(S.q)}" aria-label="Meklēt adresi"><div class="seg">${['', ...(D.groups || []).map(x => x.name)].map(n => `<button type="button" data-g="${esc(n)}" class="${S.grp === n ? 'on' : ''}">${n ? esc(n.replace('Valsts nekustamie īpašumi', 'VNĪ')) : 'Visi'}</button>`).join('')}</div>
-      ${g ? `<button class="pill dk" id="gAll">Iestatīt visai grupai</button>` : ''}</div>
+      ${g && can('vaditajs') ? `<button class="pill dk" id="gAll">Iestatīt visai grupai</button>` : ''}</div>
     <div class="list">${L.slice(0, 300).map(o => { const act = o.m2 > 0 && o.aktivs !== 0;
       return `<button type="button" class="obj ${act ? '' : 'off'}" data-a="${esc(o.anorm)}"><span class="tx"><b>${esc(o.adrese)}</b><span>${act ? m2f(o.m2) + ' m² · ik ' + (o.intervals || D.cfg.interval) + ' d.' + (lastBy[o.anorm] ? ' · pēdējā ' + lvS(lastBy[o.anorm]) : '') + (nextBy[o.anorm] ? ' · nākamā ' + lvS(nextBy[o.anorm]) : '') : 'Nav pļaušanā'}${o.vaditajs ? ' · ' + esc(o.vaditajs) : ''}</span></span>
-        <span class="chip">${act ? 'Pļaušanā' : '+ Pievienot'}</span></button>`; }).join('') || '<div class="card empty">Nekas neatbilst</div>'}
+        <span class="chip">${act ? 'Pļaušanā' : can('vaditajs') ? '+ Pievienot' : 'Nav'}</span></button>`; }).join('') || '<div class="card empty">Nekas neatbilst</div>'}
       ${L.length > 300 ? `<p class="copy">Rāda 300 no ${L.length} — sašauriniet meklēšanu</p>` : ''}</div>`;
   const q = $('oq'); q.oninput = () => { const p = q.selectionStart; S.q = q.value; drawObjs(v); const q2 = $('oq'); q2.focus(); q2.setSelectionRange(p, p); };
   v.querySelector('.search .seg').onclick = (e) => { const b = e.target.closest('[data-g]'); if (b) { S.grp = b.dataset.g; drawObjs(v); } };
-  v.querySelector('.list').onclick = (e) => { const b = e.target.closest('[data-a]'); if (b) editObj(S.objBy[b.dataset.a]); };
+  v.querySelector('.list').onclick = (e) => { const b = e.target.closest('[data-a]'); if (b) objCard(S.objBy[b.dataset.a]); };
   const ga = $('gAll'); if (ga) ga.onclick = () => editGroup(g);
 }
+/* ---------- Objekta kartiņa ---------- */
+async function objCard(o) {
+  const D = S.D, act = o.m2 > 0 && o.aktivs !== 0;
+  const next = D.visits.filter(x => x.anorm === o.anorm && x.statuss === 'plan').map(x => x.datums).sort()[0];
+  const last = ((D.last || []).find(l => l.anorm === o.anorm) || {}).d;
+  const gmaps = 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(o.lat ? o.lat + ',' + o.lng : o.adrese.replace(/^\s*(j|vn[iī])\s*\|\s*/i, '') + ', Latvija');
+  const s = sheet(`<div class="hd"><h3>${esc(o.adrese)}</h3>${X}</div>
+    <p style="margin:-6px 0 12px;font-weight:700;color:var(--ink3)">${[o.grupa && o.grupa !== 'SH objekti' ? esc(o.grupa) : '', o.vaditajs ? 'vadītājs ' + esc(o.vaditajs) : ''].filter(Boolean).join(' · ')}</p>
+    <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:0 0 12px">
+      <div class="card mint"><span style="font-size:12px;font-weight:800;color:var(--ink2)">Pļaujamā platība</span><b style="display:block;font-size:20px;font-weight:800">${act ? m2f(o.m2) + ' m²' : '—'}</b></div>
+      <div class="card"><span style="font-size:12px;font-weight:800;color:var(--ink2)">Intervāls</span><b style="display:block;font-size:20px;font-weight:800">${act ? 'ik ' + (o.intervals || D.cfg.interval) + ' dienas' : 'nav pļaušanā'}</b></div>
+      <div class="card"><span style="font-size:12px;font-weight:800;color:var(--ink2)">Nākamā pļaušana</span><b style="display:block;font-size:20px;font-weight:800">${next ? WD[dow(next) - 1] + ', ' + lvS(next) : '—'}</b></div>
+      <div class="card"><span style="font-size:12px;font-weight:800;color:var(--ink2)">Pēdējā</span><b style="display:block;font-size:20px;font-weight:800">${last ? lvS(last) : '—'}</b></div></div>
+    ${o.piekluve ? `<div class="card f" style="font-weight:700"><span class="lb" style="margin:0 0 4px">Piekļuve</span>${esc(o.piekluve)}</div>` : ''}
+    ${o.piezime ? `<div class="card f" style="font-weight:700"><span class="lb" style="margin:0 0 4px">Piezīme</span>${esc(o.piezime)}</div>` : ''}
+    <div style="display:flex;flex-wrap:wrap;gap:8px;margin:0 0 14px"><a class="pill" href="${gmaps}" target="_blank" rel="noopener">Google Maps</a>${can('vaditajs') ? '<button class="pill dk" id="oEdit">Labot</button>' : ''}</div>
+    <div class="sec" style="margin-top:6px"><h2 style="font-size:18px">Pēc pļaušanas</h2></div><div id="oPh" class="thumbs" style="flex-wrap:wrap"><span style="font-weight:700;color:var(--ink3)">Ielādē…</span></div>
+    <div class="sec"><h2 style="font-size:18px">Vēsture</h2></div><div id="oHist" class="card" style="padding:4px 14px"></div>`);
+  const ed = s.querySelector('#oEdit'); if (ed) ed.onclick = () => editObj(o);
+  try {
+    const h = (await api('obj', { anorm: o.anorm })).hist;
+    const ph = h.filter(x => x.foto).flatMap(x => x.foto.split(',').filter(Boolean).map(id => ({ id, d: x.datums })));
+    s.querySelector('#oPh').innerHTML = ph.slice(0, 12).map(p => `<a href="${IMG.replace('w400', 'w1600') + encodeURIComponent(p.id)}" target="_blank" rel="noopener" title="${lvS(p.d)}"><img src="${IMG + encodeURIComponent(p.id)}" alt="Bilde ${lvS(p.d)}" style="width:96px;height:96px"></a>`).join('') || '<span style="font-weight:700;color:var(--ink3)">Vēl nav bilžu</span>';
+    const SL = { done: ['Nopļauts', 'var(--ok)'], plan: ['Ieplānots', 'var(--ink2)'] };
+    s.querySelector('#oHist').innerHTML = h.map((x, i) => `<div style="display:flex;justify-content:space-between;gap:8px;padding:10px 0;font-size:13.5px;font-weight:700;${i ? 'border-top:1px solid var(--surf2)' : ''}">
+      <span>${WD[dow(x.datums) - 1]}, ${lvS(x.datums)}${x.izpilditajs ? ' · ' + esc(x.izpilditajs) : ''}${x.iemesls ? ' · ' + esc(x.iemesls) : ''}</span><span style="font-weight:800;color:${(SL[x.statuss] || SL.plan)[1]}">${(SL[x.statuss] || SL.plan)[0]}${x.parcelts ? ' · pārc. ' + x.parcelts + '×' : ''}</span></div>`).join('') || '<div class="empty" style="padding:14px">Vēl nav izbraukumu</div>';
+  } catch (err) { s.querySelector('#oPh').innerHTML = `<span style="font-weight:700;color:var(--bad)">${esc(err.message)}</span>`; }
+}
+
+/* ---------- Karte (OpenStreetMap) ---------- */
+function leaflet() {
+  if (window.L) return Promise.resolve();
+  return new Promise((res, rej) => { const c = document.createElement('link'); c.rel = 'stylesheet'; c.href = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css'; document.head.appendChild(c);
+    const j = document.createElement('script'); j.src = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js'; j.onload = res; j.onerror = () => rej(new Error('Karte neielādējās')); document.head.appendChild(j); });
+}
+async function drawMap(v) {
+  const D = S.D, d = S.day; $('hdTitle').textContent = 'Karte';
+  const day = D.visits.filter(x => x.datums === d), byA = {}; day.forEach(x => byA[x.anorm] = x);
+  const objs = D.objects.filter(o => o.m2 > 0 && o.aktivs !== 0), withC = objs.filter(o => o.lat), noC = objs.filter(o => o.lat == null).length;
+  v.innerHTML = `<div class="seg" style="margin:0 0 12px">${[0, 1, 2].map(i => addDays(D.today, i)).concat(D.visits.some(x => x.datums === d) && [0, 1, 2].every(i => addDays(D.today, i) !== d) ? [d] : []).map(x => `<button type="button" data-d="${x}" class="${x === d ? 'on' : ''}">${x === D.today ? 'Šodien' : x === addDays(D.today, 1) ? 'Rīt' : WD[dow(x) - 1] + ' ' + lvS(x)}</button>`).join('')}</div>
+    <div class="grid2"><div class="main"><div id="map" style="height:min(62vh,620px);border-radius:28px;overflow:hidden;background:var(--surf)"></div>
+      <div class="legend"><span><i style="background:#3f7d5a;border-radius:50%"></i>Nopļauts</span><span><i style="background:#17201c;border-radius:50%"></i>Ieplānots šai dienai</span><span><i style="background:#c98a00;border-radius:50%"></i>Pārcelts</span><span><i style="background:#b9c2bd;border-radius:50%"></i>Citi objekti</span></div></div>
+      <div class="side"><div class="card" style="margin:0 0 8px"><b style="font-weight:800">${day.length} izbraukumi · ${m2f(day.reduce((n, x) => n + (+((S.objBy[x.anorm] || {}).m2) || 0), 0))} m²</b>
+        <p style="margin:4px 0 0;font-size:13px;font-weight:700;color:var(--ink2)">${withC.length} no ${objs.length} objektiem uz kartes${noC ? ' · ' + noC + ' vēl bez koordinātām' : ''}</p>
+        ${noC && can('vaditajs') ? '<button class="pill dk" id="mGeo" style="margin-top:10px">Atrast koordinātas</button>' : ''}</div>
+        <div class="list">${day.map((x, i) => `<button type="button" class="stop s-${x.statuss === 'done' ? 'done' : x.prio ? 'moved' : 'plan'}" data-v="${x.id}"><span class="n">${i + 1}</span><span class="tx"><b>${esc(x.adrese)}</b><span>${m2f((S.objBy[x.anorm] || {}).m2)} m²</span></span></button>`).join('') || '<div class="card empty">Šai dienai nav izbraukumu</div>'}</div></div></div>`;
+  v.querySelector('.seg').onclick = (e) => { const b = e.target.closest('[data-d]'); if (b) { S.day = b.dataset.d; drawMap(v); } };
+  v.querySelector('.list').onclick = (e) => { const b = e.target.closest('[data-v]'); if (b) openVisit(b.dataset.v); };
+  const g = $('mGeo'); if (g) g.onclick = async () => { g.disabled = true; g.textContent = 'Meklē… (~15 s)'; try { const r = await api('geo'); toast('Atrastas ' + r.found + (r.left ? ' · vēl ' + r.left + ' — spiediet vēlreiz' : '')); await load(); } catch (err) { toast(err.message, 'err'); g.disabled = false; } };
+  try { await leaflet(); } catch (err) { $('map').innerHTML = `<div class="empty">${esc(err.message)}</div>`; return; }
+  if (S.map) { S.map.remove(); S.map = null; }
+  const m = S.map = L.map('map', { zoomControl: true, attributionControl: true });
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(m);
+  const pts = [];
+  withC.forEach(o => { const x = byA[o.anorm], col = !x ? '#b9c2bd' : x.statuss === 'done' ? '#3f7d5a' : x.prio ? '#c98a00' : '#17201c';
+    const mk = L.circleMarker([o.lat, o.lng], { radius: x ? 9 : 6, color: '#fff', weight: 2, fillColor: col, fillOpacity: 1 }).addTo(m);
+    mk.bindTooltip(o.adrese + (x ? ' · ' + (x.statuss === 'done' ? 'nopļauts' : 'ieplānots') : ''));
+    mk.on('click', () => x ? openVisit(x.id) : objCard(o)); if (x) pts.push([o.lat, o.lng]); });
+  const all = pts.length ? pts : withC.map(o => [o.lat, o.lng]);
+  if (all.length) m.fitBounds(all, { padding: [30, 30], maxZoom: 15 }); else m.setView([56.95, 24.11], 11);
+}
+
 function editObj(o) {
   const s = sheet(`<div class="hd"><h3>${esc(o.adrese)}</h3>${X}</div>
     <div class="row2"><div class="f"><label for="eM2">Pļaujamā platība, m²</label><input id="eM2" type="number" min="0" step="10" inputmode="numeric" value="${o.m2 || ''}" placeholder="Piem. 1200"></div>
@@ -369,7 +434,7 @@ function drawRules(v) {
 
 /* ---------- start ---------- */
 (function () { const th = ls.get('plausana_theme'); if (th) document.documentElement.dataset.theme = th;
-  const h = location.hash.slice(1); if (h && ['today', 'month', 'objs', 'rules'].indexOf(h) !== -1) S.tab = h;
+  const h = location.hash.slice(1); if (h && ['today', 'month', 'objs', 'rules', 'map'].indexOf(h) !== -1) S.tab = h;
   if (!S.pin) return showGate('');
   load().catch(err => { if (err.code === 'auth') { ls.del('plausana_pin'); S.pin = ''; showGate('PIN vairs nederīgs vai nav piekļuves pļaušanai'); } else { showGate(err.message); } });
 })();
